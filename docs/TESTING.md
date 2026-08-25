@@ -5,9 +5,10 @@ The 2.3.1 driver was built and installed with DKMS on Proxmox VE kernels:
 - `7.0.14-11-pve`
 - `7.0.14-12-pve`
 
-Hardware under test was a WCH CH9344 adapter (`1a86:e018`) with all eight tty
+Hardware under test was a WCH CH348 adapter (`1a86:55d9`) with all eight tty
 devices present. A live 115200-baud router console was used for end-to-end TX
-and RX validation.
+and RX validation. CH9344 (`1a86:e018`) is supported by the packaged vendor
+driver but was not covered by this hardware run.
 
 ## Results
 
