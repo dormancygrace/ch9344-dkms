@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = remove ] || [ "$1" = deconfigure ] || [ "$1" = upgrade ]; then
+    modprobe -r ch9344 2>/dev/null || true
+    dkms remove -m ch9344 -v 2.3.1 --all 2>/dev/null || true
+fi
+
+exit 0

@@ -1,0 +1,1 @@
+SUBSYSTEM=="tty", KERNEL=="ttyCH9344USB*", GROUP="dialout", MODE="0660"

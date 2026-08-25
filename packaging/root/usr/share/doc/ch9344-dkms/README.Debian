@@ -1,0 +1,26 @@
+ch9344-dkms for Debian, Ubuntu and Proxmox VE
+================================================
+
+This package contains the WCH CH9344/CH348 Linux driver V2.3 with the
+GlobaLTE V2.3.1 receive-path fixes (2026.08):
+
+  * resubmit command and data receive URBs after transient USB errors;
+  * initialize the per-port receive notification bitmap;
+  * reject truncated or oversized receive frames before parsing them.
+
+Supported USB IDs:
+  1a86:e018  CH9344
+  1a86:55d9  CH348 / CH348Q
+
+Serial devices are created as /dev/ttyCH9344USB0 and following. Access is
+granted to the dialout group by the included udev rule.
+
+Useful checks:
+  dkms status ch9344/2.3.1
+  modinfo ch9344
+  ls -l /dev/ttyCH9344USB*
+  journalctl -k -g ch9344
+
+For LXC, load the module on the Proxmox host and bind-mount the desired tty
+devices into the container. Kernel modules cannot be installed inside an
+unprivileged LXC container.

@@ -1,0 +1,66 @@
+#!/usr/bin/expect -f
+
+set timeout 10
+set port [expr {[info exists env(CH9344_PORT)] ? $env(CH9344_PORT) : "/dev/ttyCH9344USB0"}]
+set baud [expr {[info exists env(CH9344_BAUD)] ? $env(CH9344_BAUD) : 115200}]
+set cycles [expr {[info exists env(CH9344_CYCLES)] ? $env(CH9344_CYCLES) : 200}]
+set burst_lines [expr {[info exists env(CH9344_BURST_LINES)] ? $env(CH9344_BURST_LINES) : 3000}]
+set prompt_re [expr {[info exists env(CH9344_PROMPT_RE)] ? $env(CH9344_PROMPT_RE) : {[^\r\n]*# }}]
+set logfile "/tmp/ch9344-rx-stress.log"
+
+proc open_console {port baud} {
+	global spawn_id timeout prompt_re
+	spawn -noecho socat - $port,b$baud,raw,echo=0
+	after 100
+	send "\r"
+	expect {
+		-re $prompt_re { return }
+		timeout { error "console prompt timeout" }
+		eof { error "console closed before prompt" }
+	}
+}
+
+proc close_console {} {
+	global spawn_id
+	catch { close }
+	catch { wait }
+}
+
+file delete -force $logfile
+log_file -noappend $logfile
+log_user 1
+match_max 1048576
+
+open_console $port $baud
+set timeout 120
+send "i=0; while \[ \$i -lt $burst_lines \]; do printf 'CH9344_BURST_%04d_012345678901234567890123456789\\n' \$i; i=\$((i+1)); done; printf 'CH9344_BURST_DONE_%s\\n' OK\r"
+expect {
+	-re {CH9344_BURST_DONE_OK} {}
+	timeout { error "burst completion timeout" }
+	eof { error "console closed during burst" }
+}
+expect {
+	-re $prompt_re {}
+	timeout { error "prompt missing after burst" }
+}
+close_console
+
+set timeout 5
+for {set i 0} {$i < $cycles} {incr i} {
+	open_console $port $baud
+	set marker [format "CH9344_EXEC_%03d_OK" $i]
+	send [format "printf 'CH9344_EXEC_%%03d_%%s\\n' %d OK\r" $i]
+	expect {
+		-exact $marker {}
+		timeout { error "cycle $i execution timeout" }
+		eof { error "cycle $i console closed" }
+	}
+	expect {
+		-re $prompt_re {}
+		timeout { error "cycle $i prompt timeout" }
+	}
+	close_console
+}
+
+log_file
+puts "CH9344_STRESS_OK burst_lines=$burst_lines open_close_cycles=$cycles log=$logfile"

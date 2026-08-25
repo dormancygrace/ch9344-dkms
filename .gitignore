@@ -1,0 +1,8 @@
+/dist/
+*.deb
+*.ko
+*.o
+*.mod*
+Module.symvers
+modules.order
+.*.cmd

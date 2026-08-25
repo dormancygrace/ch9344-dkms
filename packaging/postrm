@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = purge ]; then
+    rm -rf /var/lib/dkms/ch9344/2.3.1
+fi
+
+depmod -a 2>/dev/null || true
+exit 0

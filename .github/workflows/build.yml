@@ -1,0 +1,21 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell scripts
+        run: |
+          shellcheck scripts/build-deb.sh packaging/postinst packaging/prerm packaging/postrm
+          sh -n scripts/build-deb.sh packaging/postinst packaging/prerm packaging/postrm
+      - name: Build Debian package
+        run: ./scripts/build-deb.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ch9344-dkms-deb
+          path: dist/*.deb

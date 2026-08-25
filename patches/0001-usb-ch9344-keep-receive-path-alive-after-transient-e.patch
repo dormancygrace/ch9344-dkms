@@ -1,0 +1,156 @@
+From 30d9cbcf846440df87bb1e1c47352ac4514e1c4b Mon Sep 17 00:00:00 2001
+From: Gleb Pesin <dormancygrace@gmail.com>
+Date: Tue, 25 Aug 2026 18:53:01 +0000
+Subject: [PATCH] usb: ch9344: keep receive path alive after transient errors
+
+Resubmit command and data receive URBs after transient completion errors
+instead of permanently draining the finite receive pool. Keep terminal
+unlink, shutdown, disconnect, and stall statuses stopped.
+
+Initialize the per-port flip notification state and validate receive frame
+boundaries. Also release the write buffer and runtime-PM reference when a
+synchronous write times out.
+---
+ driver/ch9344.c | 52 ++++++++++++++++++++++++++++++++++---------------
+ 1 file changed, 36 insertions(+), 16 deletions(-)
+
+diff --git a/driver/ch9344.c b/driver/ch9344.c
+index 36b14ea..ee3ed46 100644
+--- a/driver/ch9344.c
++++ b/driver/ch9344.c
+@@ -38,6 +38,8 @@
+  * V2.3 - set default termios baudrate to B115200
+  *      - fix issue of automatically sending data upon opening tty
+  *        for the first time on some systems
++ * V2.3.1 - keep receive URBs alive after transient USB errors
++ *        - initialize per-port receive notification state
+  */
+ 
+ #define DEBUG
+@@ -80,7 +82,7 @@
+ 
+ #define DRIVER_AUTHOR "WCH"
+ #define DRIVER_DESC "USB serial driver for ch9344/ch348."
+-#define VERSION_DESC "V2.3 On 2025.07"
++#define VERSION_DESC "V2.3.1 On 2026.08"
+ 
+ #define IOCTL_MAGIC 'W'
+ #define IOCTL_CMD_GPIOENABLE _IOW(IOCTL_MAGIC, 0x80, u16)
+@@ -876,13 +878,13 @@ static void ch9344_cmd_irq(struct urb *urb)
+ 		dev_dbg(&ch9344->data->dev,
+ 			"%s - nonzero urb status received: %d\n", __func__,
+ 			status);
+-		return;
++		break;
+ 	}
+ 
+ 	usb_mark_last_busy(ch9344->dev);
+ 
+ 	retval = usb_submit_urb(urb, GFP_ATOMIC);
+-	if (retval && retval != -EPERM)
++	if (retval && retval != -EPERM && retval != -ENODEV)
+ 		dev_err(&ch9344->data->dev,
+ 			"%s - usb_submit_urb failed: %d\n", __func__,
+ 			retval);
+@@ -971,7 +973,7 @@ static void ch9344_process_read_urb(struct ch9344 *ch9344, struct urb *urb)
+ 	u8 usblen;
+ 	int left = 0, right = 0;
+ #ifndef PACKLOAD
+-	bool upflag[MAXPORT];
++	bool upflag[MAXPORT] = { false };
+ #endif
+ #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+ 	struct tty_struct *tty;
+@@ -989,18 +991,18 @@ static void ch9344_process_read_urb(struct ch9344 *ch9344, struct urb *urb)
+ 
+ 	if (!urb->actual_length)
+ 		return;
+-	size = urb->actual_length;
++	size = min_t(int, urb->actual_length, sizeof(buffer));
+ 
+-	memcpy(buffer, urb->transfer_buffer, urb->actual_length);
++	memcpy(buffer, urb->transfer_buffer, size);
+ 
+-	for (i = 0; i < size; i += 32) {
++	for (i = 0; i + 2 <= size; i += 32) {
+ 		portnum = *(buffer + i);
+ 		if (portnum < left || portnum >= right) {
+ 			break;
+ 		}
+ 		portnum -= ch9344->port_offset;
+ 		usblen = *(buffer + i + 1);
+-		if (usblen > 30) {
++		if (usblen > 30 || i + 2 + usblen > size) {
+ 			break;
+ 		}
+ 
+@@ -1053,24 +1055,36 @@ static void ch9344_read_bulk_callback(struct urb *urb)
+ 	struct ch9344_rb *rb = urb->context;
+ 	struct ch9344 *ch9344 = rb->instance;
+ 	int status = urb->status;
++	bool stopped = false;
+ 
+-	if (!ch9344->dev) {
++	if (!ch9344->dev || READ_ONCE(ch9344->disconnected)) {
+ 		set_bit(rb->index, &ch9344->read_urbs_free);
+ 		return;
+ 	}
+ 
+-	if (status) {
+-		set_bit(rb->index, &ch9344->read_urbs_free);
++	switch (status) {
++	case 0:
++		usb_mark_last_busy(ch9344->dev);
++		ch9344_process_read_urb(ch9344, urb);
++		break;
++	case -ENOENT:
++	case -ECONNRESET:
++	case -ESHUTDOWN:
++	case -EPIPE:
++		dev_dbg(&ch9344->data->dev,
++			"%s - urb stopped: %d\n", __func__, status);
++		stopped = true;
++		break;
++	default:
+ 		dev_dbg(&ch9344->data->dev,
+-			"%s - non-zero urb status: %d\n", __func__,
++			"%s - transient urb status: %d\n", __func__,
+ 			status);
+-		return;
++		break;
+ 	}
+ 
+-	usb_mark_last_busy(ch9344->dev);
+-	ch9344_process_read_urb(ch9344, urb);
+ 	set_bit(rb->index, &ch9344->read_urbs_free);
+-	ch9344_submit_read_urb(ch9344, rb->index, GFP_ATOMIC);
++	if (!stopped && !READ_ONCE(ch9344->disconnected))
++		ch9344_submit_read_urb(ch9344, rb->index, GFP_ATOMIC);
+ }
+ 
+ /* data interface wrote those outgoing bytes */
+@@ -1378,6 +1392,9 @@ transmit:
+ 
+ 	stat = usb_autopm_get_interface_async(ch9344->data);
+ 	if (stat) {
++		dev_err(&ch9344->data->dev,
++			"%s - autopm get failed on port %d: %d\n",
++			__func__, portnum, stat);
+ 		wb->use = 0;
+ 		spin_unlock_irqrestore(&ch9344->write_lock, flags);
+ 		return stat;
+@@ -1406,8 +1423,11 @@ transmit:
+ 			ch9344->ttyport[portnum].write_empty,
+ 			msecs_to_jiffies(DEFAULT_TIMEOUT));
+ 		if (timeout <= 0) {
++			spin_lock_irqsave(&ch9344->write_lock, flags);
+ 			wb->use = 0;
+ 			ch9344->ttyport[portnum].write_empty = true;
++			usb_autopm_put_interface_async(ch9344->data);
++			spin_unlock_irqrestore(&ch9344->write_lock, flags);
+ 			dev_err(&ch9344->data->dev,
+ 				"%s - write timeout\n",
+ 				__func__);
+-- 
+2.43.0
+
