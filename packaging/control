@@ -1,10 +1,10 @@
 Package: ch9344-dkms
-Version: 2.3.1-1
+Version: 2.3.1-2
 Section: kernel
 Priority: optional
 Architecture: all
 Depends: dkms, make, gcc
-Recommends: proxmox-default-headers | linux-headers-amd64
+Recommends: proxmox-default-headers | linux-headers-generic | linux-headers-amd64
 Maintainer: GlobaLTE <g.pesin@globalte.ru>
 Description: DKMS driver for WCH CH9344 and CH348 USB multi-serial adapters
  Vendor WCH V2.3 driver with GlobaLTE receive-path stability fixes,

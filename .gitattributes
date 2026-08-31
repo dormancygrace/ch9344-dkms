@@ -1,0 +1,15 @@
+* text=auto
+
+*.c text eol=lf
+*.h text eol=lf
+*.md text eol=lf
+*.patch text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+Makefile text eol=lf
+driver/Makefile text eol=lf
+driver/dkms.conf text eol=lf
+packaging/control text eol=lf
+packaging/postinst text eol=lf
+packaging/postrm text eol=lf
+packaging/prerm text eol=lf
