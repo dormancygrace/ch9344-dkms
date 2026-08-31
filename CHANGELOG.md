@@ -8,6 +8,9 @@
   them and preserve the current record offset when copying GPIO values.
 - Stop receive resubmission on terminal device errors and annotate the
   disconnect flag shared with completion callbacks.
+- Validate vendor command/control ioctl lengths before using their fixed kernel
+  buffer, keep USB transfers on kernel pointers, and copy only received bytes.
+- Serialize command-response ioctls and terminate their waits on disconnect.
 
 ## 2.3.1-2 — 2026-09-01
 
