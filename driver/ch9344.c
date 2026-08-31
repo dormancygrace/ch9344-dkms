@@ -611,7 +611,7 @@ static void ch9344_cmd_irq(struct urb *urb)
 	switch (status) {
 	case 0:
 		/* success */
-		for (i = 0; i < len;) {
+		for (i = 0; i + 3 <= len;) {
 			reg_iir = *(data + i + 1);
 			portnum = *(data + i) & 0x0f;
 
@@ -627,9 +627,13 @@ static void ch9344_cmd_irq(struct urb *urb)
 			}
 
 			if (reg_iir == R_INIT) {
+				if (i + 12 > len)
+					break;
 				i += 12;
 				continue;
 			} else if (reg_iir >= R_MOD && reg_iir <= R_TM_O) {
+				if (i + 4 > len)
+					break;
 				if ((portnum >= left) &&
 				    (portnum < right)) {
 					portnum -= ch9344->port_offset;
@@ -655,11 +659,13 @@ static void ch9344_cmd_irq(struct urb *urb)
 			} else if (reg_iir >= R_IO_CE &&
 				   reg_iir <= R_IO_CI) {
 				if (reg_iir == R_IO_CI) {
+					if (i + 10 > len)
+						break;
 					spin_lock_irqsave(
 						&ch9344->write_lock,
 						flags);
 					ch9344->gpio_recv = true;
-					memcpy(&gpiovalins, data + 2,
+					memcpy(&gpiovalins, data + i + 2,
 					       0x08);
 					ch9344->gpiovalins =
 						le64_to_cpu(gpiovalins);
@@ -692,6 +698,8 @@ static void ch9344_cmd_irq(struct urb *urb)
 			} else if (((reg_iir & 0x0f) == R_II_B3) ||
 				   ((reg_iir == VEN_R) &&
 				    (*(data + i + 2) == (rgadd | 0x06)))) {
+				if (reg_iir == VEN_R && i + 4 > len)
+					break;
 				if ((portnum >= left) &&
 				    (portnum < right)) {
 					portnum -= ch9344->port_offset;
@@ -833,6 +841,8 @@ static void ch9344_cmd_irq(struct urb *urb)
 				i += 3;
 				continue;
 			} else if (reg_iir == R_EE_CFG) {
+				if (i + 4 > len)
+					break;
 				if (*(data + i) == CMD_W_R) {
 					spin_lock_irqsave(
 						&ch9344->write_lock,
@@ -855,6 +865,8 @@ static void ch9344_cmd_irq(struct urb *urb)
 				i += 4;
 				continue;
 			} else if (reg_iir == R_UP_O) {
+				if (i + 4 > len)
+					break;
 				i += 4;
 				continue;
 			} else {
@@ -869,6 +881,8 @@ static void ch9344_cmd_irq(struct urb *urb)
 	case -ECONNRESET:
 	case -ENOENT:
 	case -ESHUTDOWN:
+	case -ENODEV:
+	case -EPIPE:
 		/* this urb is terminated, clean up */
 		dev_dbg(&ch9344->data->dev,
 			"%s - urb shutting down with status: %d\n",
@@ -880,6 +894,9 @@ static void ch9344_cmd_irq(struct urb *urb)
 			status);
 		break;
 	}
+
+	if (READ_ONCE(ch9344->disconnected))
+		return;
 
 	usb_mark_last_busy(ch9344->dev);
 
@@ -991,7 +1008,12 @@ static void ch9344_process_read_urb(struct ch9344 *ch9344, struct urb *urb)
 
 	if (!urb->actual_length)
 		return;
-	size = min_t(int, urb->actual_length, sizeof(buffer));
+	size = urb->actual_length;
+	if (size > (int)sizeof(buffer)) {
+		dev_dbg(&ch9344->data->dev,
+			"%s - oversized frame: %d\n", __func__, size);
+		return;
+	}
 
 	memcpy(buffer, urb->transfer_buffer, size);
 
@@ -1002,9 +1024,8 @@ static void ch9344_process_read_urb(struct ch9344 *ch9344, struct urb *urb)
 		}
 		portnum -= ch9344->port_offset;
 		usblen = *(buffer + i + 1);
-		if (usblen > 30 || i + 2 + usblen > size) {
+		if (usblen > 30 || i + 2 + usblen > size)
 			break;
-		}
 
 		if (ch9344->ttyport[portnum].isopen) {
 #ifndef PACKLOAD
@@ -1070,6 +1091,7 @@ static void ch9344_read_bulk_callback(struct urb *urb)
 	case -ENOENT:
 	case -ECONNRESET:
 	case -ESHUTDOWN:
+	case -ENODEV:
 	case -EPIPE:
 		dev_dbg(&ch9344->data->dev,
 			"%s - urb stopped: %d\n", __func__, status);
@@ -3259,7 +3281,7 @@ static void ch9344_disconnect(struct usb_interface *intf)
 	usb_deregister_dev(intf, &ch9344_class);
 
 	mutex_lock(&ch9344->mutex);
-	ch9344->disconnected = true;
+	WRITE_ONCE(ch9344->disconnected, true);
 	wake_up_interruptible(&ch9344->wcfgioctl);
 	wake_up_interruptible(&ch9344->wgpioioctl);
 	usb_set_intfdata(ch9344->data, NULL);
