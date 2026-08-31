@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.3.1-2 — 2026-09-01
+
+- Recommend the native generic kernel-header package on Ubuntu while retaining
+  the Proxmox VE and Debian alternatives.
+- Compile the external module against current Ubuntu generic headers in CI,
+  with extra kernel warnings enabled and promoted to errors.
+- Remove an unused packet-count calculation reported by the kernel's `W=1`
+  checks.
+
 ## 2.3.1-1 — 2026-08-25
 
 - Resubmit command and data receive URBs after transient USB errors.
