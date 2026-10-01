@@ -39,3 +39,29 @@ tests/ch9344-rx-stress.exp
 
 The test only sends output and `printf` commands. It does not reboot or write
 flash on the connected target.
+
+
+## Complete 2.3.1-3 candidate, 2026-10-01
+
+The complete driver from PR #2 (source head `3c20254`), including all final
+changes in WCH ch9344ser_linux PRs #50 and #51, was validated on the physical
+CH348Q adapter with package `ch9344-dkms 2.3.1-3` and Proxmox
+`7.0.14-19-pve`.
+
+The source extracted from the exact Debian package matches the installed
+`ch9344.c` and `ch9344.h` byte for byte. A fresh external-module build against
+the active kernel headers passes with `W=1 KCFLAGS=-Werror`. The freshly
+built module, loaded module and installed DKMS modules for `7.0.14-17-pve`
+and `7.0.14-19-pve` report source version `F64C8B8FE91078B6C647A82`.
+The `ch9344.c` SHA-256 is
+`b551698ee57fb603ced01717e0c9512b476eb0b5d004a53a21e0c29c45f4a499`.
+
+At 115200 baud, UART channel 5 connected to a live OpenWrt shell received
+3000/3000 numbered records in order without missing or duplicate records,
+and passed 200/200 open/command/close cycles. All eight TTY ports remained
+present. The installed module was retained and the test console was logged
+out afterward.
+
+This validates ordinary TTY TX/RX and lifecycle behavior of the complete
+packaged candidate. It does not validate the CH9344 variant or every GPIO,
+vendor-command/control ioctl, disconnect or USB-error path.

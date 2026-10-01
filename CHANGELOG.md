@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.3.1-3 — 2026-09-01
+
+- Synchronize the packaged source with the final six-commit candidate in
+  `WCHSoftGroup/ch9344ser_linux#50`.
+- Validate variable-length command response records before reading or skipping
+  them and preserve the current record offset when copying GPIO values.
+- Stop receive resubmission on terminal device errors and annotate the
+  disconnect flag shared with completion callbacks.
+- Validate vendor command/control ioctl lengths before using their fixed kernel
+  buffer, keep USB transfers on kernel pointers, and copy only received bytes.
+- Serialize command-response ioctls and terminate their waits on disconnect.
+
 ## 2.3.1-2 — 2026-09-01
 
 - Recommend the native generic kernel-header package on Ubuntu while retaining

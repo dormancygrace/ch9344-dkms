@@ -1,5 +1,5 @@
 Package: ch9344-dkms
-Version: 2.3.1-2
+Version: 2.3.1-3
 Section: kernel
 Priority: optional
 Architecture: all

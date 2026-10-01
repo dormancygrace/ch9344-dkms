@@ -2,7 +2,7 @@
 set -eu
 
 version=2.3.1
-revision=2
+revision=3
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_dir=$(CDPATH='' cd -- "$script_dir/.." && pwd)
 output_dir=${1:-"$repo_dir/dist"}

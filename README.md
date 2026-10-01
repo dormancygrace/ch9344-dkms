@@ -24,7 +24,7 @@ leak is fixed as well.
 ## Install the release package
 
 ```sh
-sudo apt install ./ch9344-dkms_2.3.1-2_all.deb
+sudo apt install ./ch9344-dkms_2.3.1-3_all.deb
 modinfo ch9344 | grep '^version:'
 dkms status ch9344/2.3.1
 ```
